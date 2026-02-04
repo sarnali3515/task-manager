@@ -17,7 +17,7 @@ export const syncDB = async () => {
         await sequelize.authenticate();
         console.log("DB Connected");
 
-        await sequelize.sync({ alter: true });
+        await sequelize.sync();
         console.log("Models Synced");
     } catch (error) {
         console.error("DB Error:", error);
