@@ -11,17 +11,4 @@ Task.belongsTo(User, {
     as: "assignedTo",
 });
 
-// Sync DB
-export const syncDB = async () => {
-    try {
-        await sequelize.authenticate();
-        console.log("DB Connected");
-
-        await sequelize.sync();
-        console.log("Models Synced");
-    } catch (error) {
-        console.error("DB Error:", error);
-    }
-};
-
-export { User, Task };
+export { sequelize, User, Task };
