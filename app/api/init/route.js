@@ -10,6 +10,6 @@ const sequelize = getSequelize();
 
 export async function GET() {
     await syncDB();
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     return NextResponse.json({ message: "Database initialized" });
 }
