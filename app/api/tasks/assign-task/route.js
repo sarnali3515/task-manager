@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { Task, User, syncDB } from "@/models";
+import { Task, User } from "@/models";
 import { apiError } from "../../../../lib/apiError";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ export async function PATCH(req) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
-        await syncDB();
+
 
         const { taskId, assignedToId } = await req.json();
 

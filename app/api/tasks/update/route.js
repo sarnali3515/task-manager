@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { Task, syncDB } from "@/models";
+import { Task } from "@/models";
 import { apiError } from "../../../../lib/apiError";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function PATCH(req) {
             return NextResponse.json({ message: "Invalid token" }, { status: 401 });
         }
 
-        await syncDB(); // ensure models & associations are loaded
+        // ensure models & associations are loaded
 
         const { taskId, description, status } = await req.json();
 

@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { User, syncDB } from "@/models";
+import { User } from "@/models";
 import { apiError } from "../../../lib/apiError";
 
 export const runtime = "nodejs";
@@ -29,7 +29,7 @@ export async function GET(req) {
         }
 
         // Ensure DB is synced
-        await syncDB();
+        // await syncDB();
 
         const users = await User.findAll({
             attributes: ["id", "name", "email", "role", "createdAt"],

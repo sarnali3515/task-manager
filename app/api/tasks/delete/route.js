@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { Task, syncDB } from "@/models";
+import { Task } from "@/models";
 import { apiError } from "../../../../lib/apiError";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function DELETE(req) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
-        await syncDB();
+        // await syncDB();
 
         const { taskId } = await req.json();
 

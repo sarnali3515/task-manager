@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { Task, User, syncDB } from "@/models";
+import { Task, User } from "@/models";
 import { apiError } from "../../../../lib/apiError";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function GET(req) {
             return NextResponse.json({ message: "Invalid token" }, { status: 401 });
         }
 
-        await syncDB();
+        // await syncDB();
 
         let tasks;
         if (decoded.role === "admin") {
