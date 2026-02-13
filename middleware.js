@@ -1,31 +1,25 @@
+import { getToken } from "next-auth/jwt";
+import { NextResponse } from "next/server";
+
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
+export async function middleware(req) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-export function middleware(req) {
-    const authHeader = req.headers.get("authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Only handle API requests
+    if (!token) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const token = authHeader.split(" ")[1];
+    const headers = new Headers(req.headers);
+    headers.set("x-user-id", token.id);
+    headers.set("x-user-role", token.role);
 
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const headers = new Headers(req.headers);
-        headers.set("x-user-id", decoded.id);
-        headers.set("x-user-role", decoded.role);
-
-        return NextResponse.next({ request: { headers } });
-    } catch (err) {
-        console.error("JWT Error:", err.message);
-        return NextResponse.json({ message: "Invalid token" }, { status: 401 });
-    }
+    return NextResponse.next({ request: { headers } });
 }
 
 export const config = {
-    matcher: ["/api/tasks/:path*",],
+    matcher: [
+        "/api/tasks/:path*",
+    ],
 };

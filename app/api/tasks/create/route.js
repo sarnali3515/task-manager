@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { Task, User } from "@/models";
 import { apiError } from "../../../../lib/apiError";
 
@@ -7,49 +8,63 @@ export const runtime = "nodejs";
 
 export async function POST(req) {
     try {
-        const authHeader = req.headers.get("authorization");
-        if (!authHeader?.startsWith("Bearer ")) {
-            return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+        const session = await getServerSession(authOptions);
+
+        //  Not logged in
+        if (!session || !session.user) {
+            return NextResponse.json(
+                { message: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const token = authHeader.split(" ")[1];
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (err) {
-            return NextResponse.json({ message: "Invalid token" }, { status: 401 });
+        //  Role check (safe optional chaining)
+        if (session.user?.role !== "admin") {
+            return NextResponse.json(
+                { message: "Forbidden" },
+                { status: 403 }
+            );
         }
 
-        if (decoded.role !== "admin") {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        const body = await req.json();
+        const {
+            title,
+            description = "",
+            assignedToId = null,
+            status = "pending",
+        } = body;
+
+        //  Validation
+        if (!title || title.trim() === "") {
+            return NextResponse.json(
+                { message: "Title is required" },
+                { status: 400 }
+            );
         }
 
-
-
-        const { title, description, assignedToId, status } = await req.json();
-
-        if (!title) {
-            return NextResponse.json({ message: "Title is required" }, { status: 400 });
-        }
-
-        // Check if assigned user exists
         let assignedUser = null;
+
         if (assignedToId) {
             assignedUser = await User.findByPk(assignedToId);
+
             if (!assignedUser) {
-                return NextResponse.json({ message: "Assigned user not found" }, { status: 404 });
+                return NextResponse.json(
+                    { message: "Assigned user not found" },
+                    { status: 404 }
+                );
             }
         }
 
-        // Create task
+        //  Create Task
         const task = await Task.create({
-            title,
-            description: description || "",
-            status: status || "pending",
+            title: title.trim(),
+            description: description.trim(),
+            status,
             assignedToId: assignedUser ? assignedUser.id : null,
+            createdById: session.user.id, //  track who created it
         });
 
-        // Reload task including assigned user
+        //  Reload with relation
         const taskWithUser = await Task.findByPk(task.id, {
             include: {
                 model: User,
@@ -58,10 +73,14 @@ export async function POST(req) {
             },
         });
 
-        return NextResponse.json({
-            message: "Task created",
-            task: taskWithUser,
-        });
+        return NextResponse.json(
+            {
+                message: "Task created successfully",
+                task: taskWithUser,
+            },
+            { status: 201 }
+        );
+
     } catch (error) {
         return apiError(error);
     }

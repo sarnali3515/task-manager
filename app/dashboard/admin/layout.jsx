@@ -10,44 +10,37 @@ import {
     Menu,
     X
 } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
 
 export default function AdminLayout({ children }) {
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [userName, setUserName] = useState("");
-
+    const { data: session, status } = useSession();
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        const role = localStorage.getItem("userRole");
+        if (status === "loading") return;
 
-        if (!token) {
+        if (status === "unauthenticated") {
             router.replace("/login");
             return;
         }
 
-        if (role !== "admin") {
+        if (session?.user?.role !== "admin") {
             router.replace("/dashboard/user");
+            return;
         }
-    }, [router]);
 
-    useEffect(() => {
-        const token = localStorage.getItem("token");
-        const role = localStorage.getItem("userRole");
-        const name = localStorage.getItem("userName") || "Admin";
+        setUserName(session.user.name || "Admin");
+        setLoading(false);
+    }, [session, status, router]);
 
-        if (!token || role !== "admin") {
-            router.replace("/login");
-        } else {
-            setUserName(name);
-        }
-    }, [router]);
 
-    const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("userRole");
-        localStorage.removeItem("userName");
-        router.push("/login");
+
+
+    const handleLogout = async () => {
+        await signOut({ callbackUrl: "/login" });
     };
 
     const menuItems = [
@@ -58,6 +51,14 @@ export default function AdminLayout({ children }) {
     const handleNavigation = (path) => {
         router.push(path);
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen text-gray-600">
+                Loading...
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-gray-50">
@@ -73,20 +74,20 @@ export default function AdminLayout({ children }) {
                         </button>
                         <h1 className="text-xl font-semibold text-gray-800">Admin Panel</h1>
                     </div>
-                    <div className="text-sm text-gray-600 font-medium">
-                        Hi, {userName}
-                    </div>
+                    <div className="text-sm text-gray-600 font-medium">Hi, {userName}</div>
                 </div>
             </div>
 
             <div className="flex">
                 {/* Sidebar */}
-                <aside className={`
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 
-          transition-transform duration-300 lg:flex lg:flex-col
-          h-screen lg:h-auto
-        `}>
+                <aside
+                    className={`
+            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+            fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200
+            transition-transform duration-300 lg:flex lg:flex-col
+            h-screen lg:h-auto
+          `}
+                >
                     {/* Logo */}
                     <div className="p-6 border-b border-gray-300">
                         <div className="flex items-center gap-3">
@@ -110,12 +111,10 @@ export default function AdminLayout({ children }) {
                                     setSidebarOpen(false);
                                 }}
                                 className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 
-                         hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200
-                         group"
+                           hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200
+                           group"
                             >
-                                <div className="text-gray-500 group-hover:text-blue-600">
-                                    {item.icon}
-                                </div>
+                                <div className="text-gray-500 group-hover:text-blue-600">{item.icon}</div>
                                 <span className="font-medium">{item.label}</span>
                                 <ChevronRight
                                     size={16}
@@ -142,8 +141,8 @@ export default function AdminLayout({ children }) {
                         <button
                             onClick={handleLogout}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 
-                       bg-red-50 text-red-600 rounded-lg hover:bg-red-100 
-                       transition-colors duration-200 font-medium"
+                         bg-red-50 text-red-600 rounded-lg hover:bg-red-100 
+                         transition-colors duration-200 font-medium"
                         >
                             <LogOut size={18} />
                             Logout
@@ -165,8 +164,9 @@ export default function AdminLayout({ children }) {
                     <header className="hidden lg:block bg-white border-b border-gray-300 shadow-sm">
                         <div className="px-6 py-4 flex justify-between items-center">
                             <div>
-                                <h2 className="text-lg font-semibold text-gray-800">Welcome back, {userName}</h2>
-
+                                <h2 className="text-lg font-semibold text-gray-800">
+                                    Welcome back, {userName}
+                                </h2>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
@@ -177,9 +177,7 @@ export default function AdminLayout({ children }) {
                     </header>
 
                     {/* Page Content */}
-                    <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-                        {children}
-                    </main>
+                    <main className="flex-1 p-4 lg:p-6 overflow-y-auto">{children}</main>
                 </div>
             </div>
         </div>

@@ -2,43 +2,66 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchAPI } from "@/lib/api";
+import { signIn, getSession } from "next-auth/react";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
     const router = useRouter();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+
+    const [form, setForm] = useState({
+        email: "",
+        password: "",
+    });
+
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
+    const handleChange = (e) => {
+        setForm({
+            ...form,
+            [e.target.name]: e.target.value,
+        });
+    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        if (loading) return;
+
         setError("");
         setLoading(true);
 
         try {
-            const res = await fetchAPI("/api/auth/login", "POST", {
-                email,
-                password,
+            const res = await signIn("credentials", {
+                email: form.email.toLowerCase().trim(),
+                password: form.password,
+                redirect: false,
             });
 
-            // save token & role
-            localStorage.setItem("token", res.token);
-            localStorage.setItem("userRole", res.user.role);
-            localStorage.setItem("userName", res.user.name);
-            localStorage.setItem("userId", res.user.id);
+            if (res?.error) {
+                setError("Invalid email or password");
+                setLoading(false);
+                return;
+            }
 
-            // redirect based on role
-            if (res.user.role === "admin") {
+            //  Important: Refresh session
+            const session = await getSession();
+
+            if (!session) {
+                setError("Login failed. Please try again.");
+                setLoading(false);
+                return;
+            }
+
+            //  Role based redirect
+            if (session.user.role === "admin") {
                 router.push("/dashboard/admin");
             } else {
                 router.push("/dashboard/user");
             }
+
         } catch (err) {
-            setError(err.message || "Login failed");
+            setError("Something went wrong. Please try again.");
         } finally {
             setLoading(false);
         }
@@ -47,14 +70,12 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-4">
             <div className="w-full max-w-md">
-                {/* Logo/Header */}
                 <div className="text-center mb-8">
-
-                    <h1 className="text-3xl font-bold text-gray-900">Welcome Back
+                    <h1 className="text-3xl font-bold text-gray-900">
+                        Welcome Back
                     </h1>
                 </div>
 
-                {/* Login Form */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-300 p-8">
                     <form onSubmit={handleLogin} className="space-y-6">
                         {error && (
@@ -68,12 +89,13 @@ export default function LoginPage() {
                                 Email Address
                             </label>
                             <input
+                                name="email"
                                 type="email"
                                 placeholder="abc@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 text-black border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                value={form.email}
+                                onChange={handleChange}
                                 required
+                                className="w-full px-4 py-3 text-black border border-gray-300 rounded-lg"
                             />
                         </div>
 
@@ -84,48 +106,38 @@ export default function LoginPage() {
 
                             <div className="relative">
                                 <input
+                                    name="password"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 pr-12 text-black border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                    value={form.password}
+                                    onChange={handleChange}
                                     required
+                                    className="w-full px-4 py-3 pr-12 text-black border border-gray-300 rounded-lg"
                                 />
 
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+                                    className="absolute inset-y-0 right-3 flex items-center text-gray-500"
                                 >
                                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
                         </div>
 
-
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3 bg-blue-600 text-white rounded-lg disabled:opacity-50"
                         >
-                            {loading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Loging in...
-                                </span>
-                            ) : (
-                                "Log In"
-                            )}
+                            {loading ? "Logging in..." : "Log In"}
                         </button>
                     </form>
-                    {/* Login Link */}
-                    <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+
+                    <div className="mt-8 pt-6 border-t border-gray-300 text-center">
                         <p className="text-gray-600">
                             New here?{" "}
-                            <a
-                                href="/register"
-                                className="text-blue-600 hover:text-blue-800 font-medium"
-                            >
+                            <a href="/register" className="text-blue-600 font-medium">
                                 Register Now
                             </a>
                         </p>

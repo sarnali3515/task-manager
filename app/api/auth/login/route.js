@@ -1,54 +1,54 @@
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import User from "@/models/User";
-import { apiError } from "../../../../lib/apiError";
+// import { NextResponse } from "next/server";
+// import bcrypt from "bcryptjs";
+// import jwt from "jsonwebtoken";
+// import User from "@/models/User";
+// import { apiError } from "../../../../lib/apiError";
 
-export async function POST(req) {
-    try {
-        const { email, password } = await req.json();
+// export async function POST(req) {
+//     try {
+//         const { email, password } = await req.json();
 
-        if (!email || !password) {
-            return NextResponse.json(
-                { message: "Email and password required" },
-                { status: 400 }
-            );
-        }
+//         if (!email || !password) {
+//             return NextResponse.json(
+//                 { message: "Email and password required" },
+//                 { status: 400 }
+//             );
+//         }
 
-        const user = await User.findOne({ where: { email } });
+//         const user = await User.findOne({ where: { email } });
 
-        if (!user) {
-            return NextResponse.json(
-                { message: "Invalid credentials" },
-                { status: 401 }
-            );
-        }
+//         if (!user) {
+//             return NextResponse.json(
+//                 { message: "Invalid credentials" },
+//                 { status: 401 }
+//             );
+//         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+//         const isMatch = await bcrypt.compare(password, user.password);
 
-        if (!isMatch) {
-            return NextResponse.json(
-                { message: "Invalid credentials" },
-                { status: 401 }
-            );
-        }
+//         if (!isMatch) {
+//             return NextResponse.json(
+//                 { message: "Invalid credentials" },
+//                 { status: 401 }
+//             );
+//         }
 
-        const token = jwt.sign(
-            { id: user.id, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: "1d" }
-        );
+//         const token = jwt.sign(
+//             { id: user.id, role: user.role },
+//             process.env.JWT_SECRET,
+//             { expiresIn: "1d" }
+//         );
 
-        return NextResponse.json({
-            message: "Login successful",
-            token,
-            user: {
-                id: user.id,
-                name: user.name,
-                role: user.role,
-            },
-        });
-    } catch (error) {
-        return apiError(error);
-    }
-}
+//         return NextResponse.json({
+//             message: "Login successful",
+//             token,
+//             user: {
+//                 id: user.id,
+//                 name: user.name,
+//                 role: user.role,
+//             },
+//         });
+//     } catch (error) {
+//         return apiError(error);
+//     }
+// }
