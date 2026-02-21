@@ -378,6 +378,7 @@ export default function AdminTasksPage() {
                                             value={task.assignedToId ?? ""}
                                             onChange={(e) => handleAssign(task.id, e.target.value)}
                                         >
+                                            <option value="" disabled>Unassigned</option>
                                             {users.filter(u => u.role !== "admin").map((u) => (
                                                 <option key={u.id} value={u.id}>
                                                     {u.name}

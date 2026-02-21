@@ -61,7 +61,7 @@ export default function AdminDashboardPage() {
                 totalTasks: tasks.length,
                 pendingTasks,
                 completedTasks,
-                totalUsers: users.length,
+                totalUsers: users.filter(u => u.role !== "admin").length,
             });
         } catch (err) {
             console.error("Failed to load dashboard data:", err);
