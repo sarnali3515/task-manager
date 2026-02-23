@@ -1,9 +1,21 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { getSequelize } from "@/lib/db";
 import User from "@/models/User";
 
 export const runtime = "nodejs";
+
+const initializeDatabase = async () => {
+    const sequelize = getSequelize();
+    try {
+        await sequelize.authenticate();
+        console.log('Database connected in NextAuth');
+    } catch (error) {
+        console.error('Database connection failed:', error);
+        throw error;
+    }
+};
 
 export const authOptions = {
     providers: [
@@ -11,7 +23,9 @@ export const authOptions = {
             name: "Credentials",
             async authorize(credentials) {
                 try {
-                    console.log("Login attempt:", credentials);
+                    await initializeDatabase();
+
+                    console.log("Login attempt for email:", credentials?.email);
 
                     if (!credentials?.email || !credentials?.password) {
                         throw new Error("Email and password are required");
@@ -27,11 +41,13 @@ export const authOptions = {
                     }
 
                     const isMatch = await bcrypt.compare(credentials.password, user.password);
-                    console.log("Password match:", isMatch);
 
                     if (!isMatch) {
+                        console.log("Password mismatch for:", credentials.email);
                         throw new Error("Invalid email or password");
                     }
+
+                    console.log("Login successful for:", credentials.email);
 
                     return {
                         id: user.id,
@@ -49,6 +65,7 @@ export const authOptions = {
 
     session: {
         strategy: "jwt",
+        maxAge: 30 * 24 * 60 * 60, // 30 days
     },
 
     callbacks: {
@@ -73,12 +90,14 @@ export const authOptions = {
         },
     },
 
-
     pages: {
         signIn: "/login",
+        error: "/login",
     },
 
     secret: process.env.NEXTAUTH_SECRET,
+
+    debug: process.env.NODE_ENV === 'development',
 };
 
 const handler = NextAuth(authOptions);
