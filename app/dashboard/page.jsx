@@ -1,27 +1,37 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
-export default function DashboardRedirect() {
-    const { data: session, status } = useSession();
+export default function DashboardPage() {
     const router = useRouter();
 
     useEffect(() => {
-        if (status === "loading") return;
+        const redirectBasedOnRole = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
 
-        if (status === "unauthenticated") {
-            router.replace("/login");
-            return;
-        }
+            if (!session) {
+                router.replace("/login");
+                return;
+            }
 
-        if (session?.user?.role === "admin") {
-            router.replace("/dashboard/admin");
-        } else {
-            router.replace("/dashboard/user");
-        }
-    }, [status, session, router]);
+            // Metadata
+            const role = session.user?.user_metadata?.role;
 
-    return null;
+            if (role === "admin") {
+                router.replace("/dashboard/admin");
+            } else {
+                router.replace("/dashboard/user");
+            }
+        };
+
+        redirectBasedOnRole();
+    }, [router]);
+
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <p>Redirecting...</p>
+        </div>
+    );
 }

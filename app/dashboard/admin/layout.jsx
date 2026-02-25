@@ -2,45 +2,51 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-    Home,
-    ClipboardList,
-    LogOut,
-    ChevronRight,
-    Menu,
-    X
-} from "lucide-react";
-import { useSession, signOut } from "next-auth/react";
+import { supabase } from "@/lib/supabase";
+import { Home, ClipboardList, LogOut, ChevronRight, Menu, X } from "lucide-react";
 
 export default function AdminLayout({ children }) {
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [userName, setUserName] = useState("");
-    const { data: session, status } = useSession();
     const [loading, setLoading] = useState(true);
+    const [session, setSession] = useState(null);
 
     useEffect(() => {
-        if (status === "loading") return;
+        const getSession = async () => {
+            const { data } = await supabase.auth.getSession();
+            const userSession = data.session ?? null;
 
-        if (status === "unauthenticated") {
-            router.replace("/login");
-            return;
-        }
+            if (!userSession) {
+                router.replace("/login");
+                return;
+            }
 
-        if (session?.user?.role !== "admin") {
-            router.replace("/dashboard/user");
-            return;
-        }
+            const role = userSession.user.user_metadata?.role;
+            console.log("role:", userSession)
+            if (role !== "admin") {
+                router.replace("/dashboard/user");
+                return;
+            }
 
-        setUserName(session.user.name || "Admin");
-        setLoading(false);
-    }, [session, status, router]);
+            setUserName(userSession.user.user_metadata?.name || "Admin");
+            setSession(userSession);
+            setLoading(false);
+        };
 
+        getSession();
 
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+            if (!newSession) router.replace("/login");
+            else setSession(newSession);
+        });
 
+        return () => listener.subscription.unsubscribe();
+    }, [router]);
 
     const handleLogout = async () => {
-        await signOut({ callbackUrl: "/login" });
+        await supabase.auth.signOut();
+        router.push("/login");
     };
 
     const menuItems = [
@@ -48,9 +54,7 @@ export default function AdminLayout({ children }) {
         { icon: <ClipboardList size={20} />, label: "Tasks", href: "/dashboard/admin/tasks" },
     ];
 
-    const handleNavigation = (path) => {
-        router.push(path);
-    };
+    const handleNavigation = (path) => router.push(path);
 
     if (loading) {
         return (

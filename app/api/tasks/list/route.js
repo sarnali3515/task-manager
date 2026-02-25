@@ -1,54 +1,30 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { Task, User } from "@/models";
-import { apiError } from "../../../../lib/apiError";
+import { supabase } from "@/lib/supabase";
 
-export const runtime = "nodejs";
-
-export async function GET(req) {
+export async function GET() {
     try {
-        //  Get session from cookie
-        const session = await getServerSession(authOptions);
+        const { data: users, error: usersError } = await supabase
+            .from("profiles")
+            .select("*")
+            .neq("role", "admin");
 
-        if (!session || !session.user) {
-            return NextResponse.json(
-                { message: "Unauthorized" },
-                { status: 401 }
-            );
-        }
+        if (usersError) throw usersError;
 
-        let tasks;
+        const { data: tasks, error: tasksError } = await supabase
+            .from("Tasks")
+            .select(`
+                *,
+                assigned_profile:profiles!assigned_to (
+                    id,
+                    name
+                )
+            `)
+            .order("createdAt", { ascending: false });
 
-        if (session.user.role === "admin") {
-            // Admin sees all tasks
-            tasks = await Task.findAll({
-                include: {
-                    model: User,
-                    as: "assignedTo",
-                    attributes: ["id", "name", "email"],
-                },
-                order: [["createdAt", "DESC"]],
-            });
-        } else {
-            // User sees only their assigned tasks
-            tasks = await Task.findAll({
-                where: { assignedToId: session.user.id },
-                include: {
-                    model: User,
-                    as: "assignedTo",
-                    attributes: ["id", "name", "email"],
-                },
-                order: [["createdAt", "DESC"]],
-            });
-        }
+        if (tasksError) throw tasksError;
 
-        return NextResponse.json(
-            { tasks },
-            { status: 200 }
-        );
-
-    } catch (error) {
-        return apiError(error);
+        return NextResponse.json({ tasks, users });
+    } catch (err) {
+        return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }

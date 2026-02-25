@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchAPI } from "@/lib/api";
-import { signIn } from "next-auth/react";
+import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function RegisterPage() {
@@ -33,38 +32,30 @@ export default function RegisterPage() {
 
         setError("");
         setSuccess("");
-
-        if (form.password.length < 6) {
-            setError("Password must be at least 6 characters");
-            return;
-        }
-
         setLoading(true);
 
         try {
-            const res = await fetchAPI("/api/auth/register", "POST", {
-                name: form.name.trim(),
+            const res = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(form),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error);
+            }
+
+            // auto login 
+            const { error: loginError } = await supabase.auth.signInWithPassword({
                 email: form.email.toLowerCase().trim(),
                 password: form.password,
             });
 
-            setSuccess("Registration successful!");
-
-            // Auto Login after register
-            await signIn("credentials", {
-                email: form.email,
-                password: form.password,
-                redirect: false,
-            });
+            if (loginError) throw new Error(loginError.message);
 
             router.push("/dashboard");
-
-
-            setForm({
-                name: "",
-                email: "",
-                password: "",
-            });
 
         } catch (err) {
             setError(err.message || "Registration failed");

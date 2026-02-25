@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn, getSession } from "next-auth/react";
+import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
@@ -32,36 +32,28 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            const res = await signIn("credentials", {
-                email: form.email.toLowerCase().trim(),
-                password: form.password,
-                redirect: false,
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(form),
             });
 
-            if (res?.error) {
-                setError("Invalid email or password");
-                setLoading(false);
-                return;
+            const result = await res.json();
+
+            if (!res.ok) {
+                throw new Error(result.error);
             }
 
-            //  Important: Refresh session
-            const session = await getSession();
+            //  Set session
+            await supabase.auth.setSession({
+                access_token: result.session.access_token,
+                refresh_token: result.session.refresh_token,
+            });
 
-            if (!session) {
-                setError("Login failed. Please try again.");
-                setLoading(false);
-                return;
-            }
-
-            //  Role based redirect
-            if (session.user.role === "admin") {
-                router.push("/dashboard/admin");
-            } else {
-                router.push("/dashboard/user");
-            }
+            router.push(result.redirectTo);
 
         } catch (err) {
-            setError("Something went wrong. Please try again.");
+            setError(err.message || "Login failed.");
         } finally {
             setLoading(false);
         }
@@ -71,9 +63,7 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">
-                        Welcome Back
-                    </h1>
+                    <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-300 p-8">

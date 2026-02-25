@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchAPI } from "@/lib/api";
 import { Plus, Trash2, Users, Search, Filter, X } from "lucide-react";
-import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function AdminTasksPage() {
-    const { data: session, status } = useSession();
-
+    const router = useRouter();
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -23,89 +21,102 @@ export default function AdminTasksPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [taskToDelete, setTaskToDelete] = useState(null);
 
-    // Load tasks and users
+    // Load tasks 
     const loadData = async () => {
+        setLoading(true);
+        setError("");
+
         try {
-            setLoading(true);
+            const res = await fetch("/api/tasks/list");
+            const data = await res.json();
 
-            const tasksRes = await fetchAPI("/api/tasks/list", "GET", null);
-            const usersRes = await fetchAPI("/api/users", "GET", null);
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to load data");
+            }
 
-            setTasks(tasksRes.tasks || []);
-            setUsers(usersRes.users || []);
+            setTasks(data.tasks || []);
+            setUsers(data.users || []);
         } catch (err) {
             console.error(err);
-            if (err.message.includes("401")) {
-                signOut({ callbackUrl: "/login" });
-            }
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        if (status === "authenticated") {
-            loadData();
-        }
-    }, [status]);
+        loadData();
+    }, []);
 
     // Create task
     const handleCreateTask = async (e) => {
         e.preventDefault();
-        setError("");
         setLoading(true);
+        setError("");
 
         try {
-            const res = await fetchAPI(
-                "/api/tasks/create",
-                "POST",
-                {
+            const res = await fetch("/api/tasks/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
                     title,
                     description,
-                    assignedToId: assignedToId || null,
-                },
+                    assigned_to: assignedToId || null,
+                }),
+            });
 
-            );
+            const data = await res.json();
 
-            if (!res.task) {
-                setError(res.message || "Failed to create task");
-                return;
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to create task");
             }
 
-            setTasks((prev) => [res.task, ...prev]);
+            setTasks((prev) => [data, ...prev]);
             setTitle("");
             setDescription("");
             setAssignedToId("");
         } catch (err) {
             console.error(err);
-            setError("Failed to create task");
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
 
+
     // Assign task
     const handleAssign = async (taskId, userId) => {
-        const parsedUserId = userId ? Number(userId) : null;
-        const userToAssign = users.find((u) => u.id === parsedUserId) || null;
+        const parsedUserId = userId || null;
+        const assignedUser = users.find((u) => u.id === userId);
 
+        // optimistic update
         setTasks((prev) =>
             prev.map((task) =>
                 task.id === taskId
-                    ? { ...task, assignedTo: userToAssign, assignedToId: parsedUserId }
+                    ? {
+                        ...task,
+                        assigned_to: parsedUserId,
+                        assigned_profile: assignedUser || null,
+                    }
                     : task
             )
         );
 
         try {
-            await fetchAPI(
-                "/api/tasks/assign-task",
-                "PATCH",
-                { taskId, assignedToId: parsedUserId },
+            const res = await fetch("/api/tasks/assign-task", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    taskId,
+                    userId: parsedUserId,
+                }),
+            });
 
-            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
         } catch (err) {
             console.error(err);
+            loadData(); // rollback
         }
     };
 
@@ -117,14 +128,19 @@ export default function AdminTasksPage() {
         setShowDeleteModal(false);
 
         try {
-            await fetchAPI(
-                "/api/tasks/delete",
-                "DELETE",
-                { taskId: taskToDelete.id },
+            const res = await fetch("/api/tasks/delete", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    taskId: taskToDelete.id,
+                }),
+            });
 
-            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
         } catch (err) {
             console.error(err);
+            loadData();
         } finally {
             setTaskToDelete(null);
         }
@@ -132,8 +148,8 @@ export default function AdminTasksPage() {
 
     const filteredTasks = tasks.filter((task) => {
         const matchesSearch =
-            task.title.toLowerCase().includes(search.toLowerCase()) ||
-            task.description?.toLowerCase().includes(search.toLowerCase());
+            (task.title?.toLowerCase() || '').includes(search.toLowerCase()) ||
+            (task.description?.toLowerCase() || '').includes(search.toLowerCase());
         const matchesFilter = filterStatus === "all" || task.status === filterStatus;
         return matchesSearch && matchesFilter;
     });
@@ -150,6 +166,18 @@ export default function AdminTasksPage() {
                 return "bg-gray-100 text-gray-800";
         }
     };
+
+    // loading 
+    if (loading && tasks.length === 0) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading tasks...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -185,11 +213,11 @@ export default function AdminTasksPage() {
                                         taskToDelete.status
                                     )}`}
                                 >
-                                    {taskToDelete.status.replace("-", " ")}
+                                    {taskToDelete.status?.replace("-", " ")}
                                 </span>
-                                {taskToDelete.assignedTo && (
+                                {taskToDelete.assigned_profile && (
                                     <span className="text-xs text-gray-500">
-                                        Assigned to: {taskToDelete.assignedTo.name}
+                                        Assigned to: {taskToDelete.assigned_profile.name || taskToDelete.assigned_profile.email}
                                     </span>
                                 )}
                             </div>
@@ -258,9 +286,9 @@ export default function AdminTasksPage() {
                                 onChange={(e) => setAssignedToId(e.target.value)}
                             >
                                 <option value="">Not assigned</option>
-                                {users.filter(u => u.role !== "admin").map((u) => (
+                                {users.map((u) => (
                                     <option key={u.id} value={u.id}>
-                                        {u.name} ({u.email})
+                                        {u.name || u.email} {u.email ? `(${u.email})` : ''}
                                     </option>
                                 ))}
                             </select>
@@ -279,6 +307,7 @@ export default function AdminTasksPage() {
 
                     <div className="flex justify-end pt-4 border-t border-gray-300">
                         <button
+                            type="submit"
                             disabled={loading}
                             className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
@@ -332,72 +361,85 @@ export default function AdminTasksPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredTasks.map((task) => (
-                                <tr
-                                    key={task.id}
-                                    className="border-t border-gray-300 hover:bg-gray-50 transition-colors"
-                                >
-                                    <td className="p-4">
-                                        <div>
-                                            <div className="font-medium text-gray-900">{task.title}</div>
-                                            {task.description && (
-                                                <div className="text-sm text-gray-600 mt-1 line-clamp-2">
-                                                    {task.description}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="p-4">
-                                        <span
-                                            className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(
-                                                task.status
-                                            )}`}
-                                        >
-                                            {task.status.replace("-", " ")}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            {task.assignedTo ? (
-                                                <>
-                                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                                        <Users className="w-4 h-4 text-blue-600" />
+                            {filteredTasks.map((task) => {
+                                const assignedUser = task.assigned_profile || users.find(u => u.id === task.assigned_to);
+
+                                return (
+                                    <tr
+                                        key={task.id}
+                                        className="border-t border-gray-300 hover:bg-gray-50 transition-colors"
+                                    >
+                                        <td className="p-4">
+                                            <div>
+                                                <div className="font-medium text-gray-900">{task.title}</div>
+                                                {task.description && (
+                                                    <div className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                                        {task.description}
                                                     </div>
-                                                    <div>
-                                                        <div className="font-medium text-gray-900">{task.assignedTo.name}</div>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Unassigned</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="p-4 flex gap-3">
-                                        <select
-                                            className="px-3 py-1.5 text-black border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                            value={task.assignedToId ?? ""}
-                                            onChange={(e) => handleAssign(task.id, e.target.value)}
-                                        >
-                                            <option value="" disabled>Unassigned</option>
-                                            {users.filter(u => u.role !== "admin").map((u) => (
-                                                <option key={u.id} value={u.id}>
-                                                    {u.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <button
-                                            onClick={() => {
-                                                setTaskToDelete(task);
-                                                setShowDeleteModal(true);
-                                            }}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            title="Delete task"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <span
+                                                className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(
+                                                    task.status
+                                                )}`}
+                                            >
+                                                {task.status?.replace("-", " ")}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                {assignedUser ? (
+                                                    <>
+                                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                                            <Users className="w-4 h-4 text-blue-600" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium text-gray-900">
+                                                                {assignedUser.name || assignedUser.email}
+                                                            </div>
+                                                            {assignedUser.email && assignedUser.name && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    {assignedUser.email}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Unassigned</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    className="px-3 py-1.5 text-black border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                    value={task.assigned_to || ""}
+                                                    onChange={(e) => handleAssign(task.id, e.target.value)}
+                                                >
+                                                    <option value="">Unassigned</option>
+                                                    {users.map((u) => (
+                                                        <option key={u.id} value={u.id}>
+                                                            {u.name || u.email}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    onClick={() => {
+                                                        setTaskToDelete(task);
+                                                        setShowDeleteModal(true);
+                                                    }}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Delete task"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
 
                             {filteredTasks.length === 0 && (
                                 <tr>

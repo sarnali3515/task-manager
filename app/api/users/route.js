@@ -1,43 +1,40 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { User } from "@/models";
-import { apiError } from "../../../lib/apiError";
+import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
-export async function GET(req) {
+export const GET = async () => {
     try {
-        //  Get session from cookie
-        const session = await getServerSession(authOptions);
+        //current session
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData.session;
 
-        if (!session || !session.user) {
-            return NextResponse.json(
-                { message: "Unauthorized" },
-                { status: 401 }
-            );
+        if (!session) {
+            return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 });
         }
 
-        //  Only admin can access
-        if (session.user.role !== "admin") {
-            return NextResponse.json(
-                { message: "Forbidden" },
-                { status: 403 }
-            );
+        // Fetch role of logged-in user
+        const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .single();
+
+        if (profileError) throw profileError;
+
+        if (profile.role !== "admin") {
+            return new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 });
         }
 
         // Fetch all users
-        const users = await User.findAll({
-            attributes: ["id", "name", "email", "role", "createdAt"],
-            order: [["createdAt", "DESC"]],
-        });
+        const { data: users, error: usersError } = await supabase
+            .from("profiles")
+            .select("id, name, email, role, created_at")
+            .order("createdAt", { ascending: false });
 
-        return NextResponse.json(
-            { users },
-            { status: 200 }
-        );
+        if (usersError) throw usersError;
 
-    } catch (error) {
-        return apiError(error);
+        return new Response(JSON.stringify({ users }), { status: 200 });
+    } catch (err) {
+        return new Response(JSON.stringify({ message: err.message }), { status: 500 });
     }
-}
+};

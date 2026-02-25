@@ -1,70 +1,101 @@
+import { supabase } from "@/lib/supabase";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { Task } from "@/models";
-import { apiError } from "../../../../lib/apiError";
 
-export const runtime = "nodejs";
-
-export async function PATCH(req) {
+export async function PUT(request) {
     try {
-        const session = await getServerSession(authOptions);
+        // Get the authorization header
+        const authHeader = request.headers.get('authorization');
 
-        //  Not logged in
-        if (!session || !session.user) {
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return NextResponse.json(
-                { message: "Unauthorized" },
+                { error: "Unauthorized - No token provided" },
                 { status: 401 }
             );
         }
 
-        const { taskId, description, status } = await req.json();
+        // Extract the token
+        const token = authHeader.split(' ')[1];
+
+        // Verify the user with the token
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+        if (userError || !user) {
+            return NextResponse.json(
+                { error: "Unauthorized - Invalid token" },
+                { status: 401 }
+            );
+        }
+
+        // Parse request body
+        const body = await request.json();
+        const { taskId, updates } = body;
 
         if (!taskId) {
             return NextResponse.json(
-                { message: "Task ID is required" },
+                { error: "Task ID is required" },
                 { status: 400 }
             );
         }
 
-        const task = await Task.findByPk(taskId);
-
-        if (!task) {
+        if (!updates || Object.keys(updates).length === 0) {
             return NextResponse.json(
-                { message: "Task not found" },
+                { error: "No updates provided" },
+                { status: 400 }
+            );
+        }
+
+        // verify that the task belongs to this user
+        const { data: existingTask, error: fetchError } = await supabase
+            .from("Tasks")
+            .select("assigned_to")
+            .eq("id", taskId)
+            .single();
+
+        if (fetchError) {
+            return NextResponse.json(
+                { error: "Task not found" },
                 { status: 404 }
             );
         }
 
-        //  Only admin or assigned user can update
-        if (session.user.role !== "admin" && session.user.id !== task.assignedToId) {
+        // Check if the task is assigned to the current user
+        if (existingTask.assigned_to !== user.id) {
             return NextResponse.json(
-                { message: "Forbidden" },
+                { error: "You don't have permission to update this task" },
                 { status: 403 }
             );
         }
 
-        // Validate status
-        const allowedStatuses = ["pending", "in-progress", "done"];
-        if (status && !allowedStatuses.includes(status)) {
+        // Update the task
+        const { data: updatedTask, error: updateError } = await supabase
+            .from("Tasks")
+            .update({
+                ...updates,
+                updatedAt: new Date().toISOString()
+            })
+            .eq("id", taskId)
+            .select()
+            .single();
+
+        if (updateError) {
+            console.error("Error updating task:", updateError);
             return NextResponse.json(
-                { message: "Invalid status" },
-                { status: 400 }
+                { error: "Failed to update task" },
+                { status: 500 }
             );
         }
 
-        // Update fields
-        if (description !== undefined) task.description = description;
-        if (status) task.status = status;
-
-        await task.save();
-
-        return NextResponse.json(
-            { message: "Task updated successfully", task },
-            { status: 200 }
-        );
+        return NextResponse.json({
+            success: true,
+            task: updatedTask,
+            message: "Task updated successfully"
+        });
 
     } catch (error) {
-        return apiError(error);
+        console.error("Unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

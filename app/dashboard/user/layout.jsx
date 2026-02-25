@@ -1,42 +1,85 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function UserLayout({ children }) {
     const router = useRouter();
-    const { data: session, status } = useSession();
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [session, setSession] = useState(null);
+
 
     useEffect(() => {
-        if (status === "loading") return;
+        let isMounted = true;
 
-        if (status === "unauthenticated") {
-            router.replace("/login");
-            return;
-        }
+        const getSession = async () => {
+            const { data } = await supabase.auth.getSession();
+            const userSession = data.session ?? null;
 
-        if (session?.user?.role !== "user") {
-            router.replace("/dashboard/admin");
-        }
-    }, [status, session, router]);
+            if (!userSession) {
+                if (isMounted) router.replace("/login");
+                return;
+            }
 
-    // Prevent UI flash before redirect
-    if (status === "loading") {
-        return null;
-    }
+            const role = userSession.user.user_metadata?.role;
 
-    if (status === "unauthenticated") {
-        return null;
-    }
+            console.log("UserLayout - Role from metadata:", role);
 
-    if (session?.user?.role !== "user") {
-        return null;
-    }
+            if (!role || role !== "user") {
+
+                const { data: profile } = await supabase
+                    .from("profiles")
+                    .select("role, name")
+                    .eq("id", userSession.user.id)
+                    .single();
+
+                console.log("UserLayout - Profile role:", profile?.role);
+
+                if (profile?.role === "admin") {
+                    if (isMounted) router.replace("/dashboard/admin");
+                    return;
+                }
+
+                if (profile) {
+                    await supabase.auth.updateUser({
+                        data: { role: profile.role, name: profile.name }
+                    });
+                }
+            }
+
+            if (isMounted) {
+                setUser(userSession.user.user_metadata?.name || userSession.user.email || "User");
+                setSession(userSession);
+                setLoading(false);
+            }
+        };
+
+        getSession();
+
+        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+            if (!newSession && isMounted) {
+                router.replace("/login");
+            } else if (newSession && isMounted) {
+                setSession(newSession);
+                setUser(newSession.user.user_metadata?.name || newSession.user.email || "User");
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            listener?.subscription.unsubscribe();
+        };
+    }, [router]);
+
 
     const handleLogout = async () => {
-        await signOut({ callbackUrl: "/login" });
+        await supabase.auth.signOut();
+        router.push("/login");
     };
+
+    if (loading) return null;
 
     return (
         <div className="min-h-screen bg-gray-50">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchAPI } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
     ClipboardList,
     Clock,
@@ -9,13 +10,8 @@ import {
     CheckCircle,
     TrendingUp,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 
 export default function AdminDashboardPage() {
-    const { data: session, status } = useSession();
-    const router = useRouter();
-
     const [stats, setStats] = useState({
         totalTasks: 0,
         pendingTasks: 0,
@@ -25,47 +21,31 @@ export default function AdminDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    // Redirect if not logged in or not admin
     useEffect(() => {
-        if (status === "unauthenticated") {
-            router.push("/login");
-        } else if (status === "authenticated" && session.user.role !== "admin") {
-            router.push("/dashboard/user");
-        }
-    }, [status, session, router]);
-
-    useEffect(() => {
-        if (status === "authenticated" && session.user.role === "admin") {
-            loadDashboardData();
-        }
-    }, [status, session]);
+        loadDashboardData();
+    }, []);
 
     const loadDashboardData = async () => {
         try {
             setLoading(true);
             setError("");
 
-            // Fetch tasks (NextAuth session cookie will handle auth)
-            const tasksRes = await fetchAPI("/api/tasks/list");
-            const tasks = tasksRes.tasks || [];
+            const res = await fetch("/api/dashboard/stats");
+            const data = await res.json();
 
-            // Fetch users
-            const usersRes = await fetchAPI("/api/users");
-            const users = usersRes.users || [];
-
-            // Calculate stats
-            const pendingTasks = tasks.filter((t) => t.status === "pending").length;
-            const completedTasks = tasks.filter((t) => t.status === "done").length;
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to load dashboard data");
+            }
 
             setStats({
-                totalTasks: tasks.length,
-                pendingTasks,
-                completedTasks,
-                totalUsers: users.filter(u => u.role !== "admin").length,
+                totalTasks: data.totalTasks || 0,
+                pendingTasks: data.pendingTasks || 0,
+                completedTasks: data.completedTasks || 0,
+                totalUsers: data.totalUsers || 0,
             });
         } catch (err) {
-            console.error("Failed to load dashboard data:", err);
-            setError("Failed to load dashboard data");
+            console.error(err);
+            setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -89,30 +69,35 @@ export default function AdminDashboardPage() {
         </div>
     );
 
-    if (status === "loading" || loading) {
+    if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <p className="text-gray-600">Loading dashboard...</p>
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading dashboard...</p>
+                </div>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="flex items-center justify-center min-h-screen text-red-600">
-                <p>{error}</p>
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center text-red-600">
+                    <p className="text-lg font-semibold">Error</p>
+                    <p>{error}</p>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div>
-                <h2 className="text-2xl font-bold text-gray-900">Hello Admin</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Dashboard Overview</h2>
+                <p className="text-gray-600 mt-1">Welcome to your admin dashboard</p>
             </div>
 
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     title="Total Tasks"
